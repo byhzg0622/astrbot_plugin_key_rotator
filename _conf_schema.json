@@ -1,0 +1,87 @@
+{
+  "enable": {
+    "description": "总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后轮询型提供商退回原生行为（每次请求在全部 Key 中随机取一个），Key 列表与线路配置都保留，无需改回类型。"
+  },
+  "log_key_usage": {
+    "description": "日志记录每次使用的 Key",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后每次 LLM 请求都会打印实际分到的 Key（脱敏），用于确认轮换是否生效；会增加日志量。"
+  },
+  "stats_command": {
+    "description": "启用 /keyrot 状态命令",
+    "type": "bool",
+    "default": true,
+    "hint": "管理员发送 /keyrot 查看各 Key 的分配次数、成功失败数与冷却状态。"
+  },
+  "rotate_mode": {
+    "description": "轮换策略",
+    "type": "string",
+    "options": [
+      "round_robin",
+      "random"
+    ],
+    "default": "round_robin",
+    "hint": "round_robin = 严格按顺序循环（第 1 次用 1、第 2 次用 2）；random = 每次随机取一个可用 Key。仅在服务商配置里没单独设置时生效。"
+  },
+  "rotate_on_timeout": {
+    "description": "超时/连接失败时换 Key 重试",
+    "type": "bool",
+    "default": true,
+    "hint": "原生逻辑是同 Key 反复重试；开启后会立即换下一个 Key 再试，这是解决超时的关键开关。"
+  },
+  "rotate_on_429": {
+    "description": "429 限流时换 Key 重试",
+    "type": "bool",
+    "default": true,
+    "hint": "原生只在同一 source 内随机换 Key；开启后由轮换器确定性地换到下一个 Key。"
+  },
+  "switch_retries": {
+    "description": "换 Key 重试次数",
+    "type": "int",
+    "default": 1,
+    "slider": {
+      "min": 0,
+      "max": 5,
+      "step": 1
+    },
+    "hint": "一次请求最多换几个 Key 重试（不含首次）。设为 0 则失败后直接交给回退模型链。"
+  },
+  "cooldown_seconds": {
+    "description": "失败冷却时长（秒）",
+    "type": "int",
+    "default": 60,
+    "slider": {
+      "min": 0,
+      "max": 600,
+      "step": 10
+    },
+    "hint": "Key 连续失败达到阈值后暂停参与轮换的时间；设为 0 关闭冷却。"
+  },
+  "cooldown_threshold": {
+    "description": "触发冷却的连续失败次数",
+    "type": "int",
+    "default": 2,
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    },
+    "hint": "同一个 Key 连续失败多少次后进入冷却。"
+  },
+  "rate_limit_per_min": {
+    "description": "限速（每分钟调用数）",
+    "type": "int",
+    "default": 0,
+    "hint": "0 = 不限速。填 60 表示这条链路每分钟最多 60 次 LLM 调用；启用后按 Key 数均分（舍去小数，如 60÷7=8/Key），额度用满的 Key 被跳过，全部用满则该次请求移交给备用模型，窗口每 60 秒重置。"
+  },
+  "backup_provider_id": {
+    "description": "最后兜底模型",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 只用现有回退链；选择后会追加到 agent_runner 回退链末位，保证所有模型都报错/被跳过时仍有备用可转交。"
+  }
+}

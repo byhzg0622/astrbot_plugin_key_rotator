@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>API Key 轮询面板</title>
+<script src="/api/plugin/page/bridge-sdk.js"></script>
+<style>
+  :root {
+    --bg:#f4f6f9; --panel:#ffffff; --panel2:#f8fafc; --border:#e3e7ee;
+    --text:#1c2330; --muted:#79828f; --accent:#3b82f6; --ok:#16a34a;
+    --warn:#d97706; --danger:#dc2626; --chip:#eef1f6; --hover:#eff3f8;
+    --bar:#e6eaf1;
+  }
+  [data-theme="dark"] {
+    --bg:#12141a; --panel:#1a1e26; --panel2:#20242d; --border:#2b303b;
+    --text:#e7eaf0; --muted:#8b94a3; --accent:#4c8dff; --ok:#22c55e;
+    --warn:#f59e0b; --danger:#ef4444; --chip:#262b35; --hover:#242935;
+    --bar:#2a2f3a;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--text); font-size:13px;
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    display:flex; flex-direction:column; }
+
+  header { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:11px 16px; background:var(--panel); border-bottom:1px solid var(--border); }
+  header h1 { font-size:15px; margin:0; letter-spacing:.3px; }
+  header .sub { color:var(--muted); font-size:11.5px; }
+  .spacer { flex:1; }
+  .chip { background:var(--chip); border-radius:999px; padding:3px 10px;
+    font-size:11.5px; color:var(--muted); white-space:nowrap; }
+  .chip b { color:var(--text); font-weight:600; }
+  .chip.ok { color:var(--ok); } .chip.warn { color:var(--warn); }
+  .chip.off { color:var(--danger); }
+
+  button { background:var(--chip); color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:6px 13px; cursor:pointer; font-size:12.5px; }
+  button:hover { background:var(--hover); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.primary:hover { filter:brightness(1.06); }
+  button.danger { color:var(--danger); }
+  button:disabled { opacity:.55; cursor:default; }
+
+  .switch { position:relative; display:inline-flex; align-items:center; gap:7px;
+    cursor:pointer; user-select:none; font-size:12.5px; }
+  .switch input { display:none; }
+  .switch i { width:34px; height:19px; border-radius:999px; background:var(--bar);
+    position:relative; transition:.18s; flex:none; }
+  .switch i::after { content:""; position:absolute; top:2px; left:2px; width:15px;
+    height:15px; border-radius:50%; background:#fff; transition:.18s;
+    box-shadow:0 1px 3px rgba(0,0,0,.3); }
+  .switch input:checked + i { background:var(--accent); }
+  .switch input:checked + i::after { transform:translateX(15px); }
+
+  /* 顶部分析板：单行、紧凑 */
+  .kpis { display:flex; flex-wrap:nowrap; gap:7px; padding:9px 16px 0;
+    overflow-x:auto; scrollbar-width:thin; }
+  .kpi { background:var(--panel); border:1px solid var(--border); border-radius:9px;
+    padding:6px 10px; flex:1 1 0; min-width:92px; text-align:center; }
+  .kpi .v { font-size:16px; font-weight:700; line-height:1.25; }
+  .kpi .k { color:var(--muted); font-size:10.5px; margin-top:1px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi.good .v { color:var(--ok); } .kpi.bad .v { color:var(--danger); }
+  .kpi.info .v { color:var(--accent); } .kpi.warn .v { color:var(--warn); }
+
+  main { flex:1; min-height:0; display:grid; gap:12px; padding:12px 16px 16px;
+    grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr); }
+  @media (max-width: 980px) { main { grid-template-columns:1fr; } }
+  .col { display:flex; flex-direction:column; gap:12px; min-width:0; overflow-y:auto; }
+
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:11px;
+    padding:13px; }
+  .card h3 { margin:0 0 4px; font-size:13.5px; display:flex; align-items:center; gap:8px; }
+  .card h3 .tag { font-size:11px; font-weight:400; color:var(--muted); }
+  .hint { color:var(--muted); font-size:11.5px; line-height:1.7; margin:6px 0 10px; }
+
+  .linehead { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding-bottom:9px; border-bottom:1px dashed var(--border); margin-bottom:9px; }
+  .linehead .model { font-weight:600; font-size:13.5px; }
+  .linehead .base { color:var(--muted); font-size:11.5px; font-family:Consolas,monospace;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+  .nextpill { background:rgba(76,141,255,.14); color:var(--accent); border-radius:999px;
+    padding:2px 9px; font-size:11px; white-space:nowrap; }
+
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:7px 6px; border-bottom:1px solid var(--border);
+    vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; font-size:11.5px; }
+  tr:last-child td { border-bottom:none; }
+  tr.isnext { background:rgba(76,141,255,.08); }
+  tr.cool td { opacity:.72; }
+  td.k { font-family:Consolas,monospace; white-space:nowrap; }
+  td.num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .idx { display:inline-block; min-width:20px; height:20px; line-height:20px;
+    text-align:center; border-radius:6px; background:var(--chip); font-size:11px;
+    color:var(--muted); }
+  tr.isnext .idx { background:var(--accent); color:#fff; }
+  /* 额度条：限速时按均分切成 N 格 */
+  .segbar { display:flex; gap:2px; width:100%; max-width:150px; margin-top:4px; }
+  .segbar i { flex:1 1 0; height:7px; border-radius:2px; background:var(--bar); }
+  .segbar i.on { background:var(--accent); }
+  .segbar.full i { background:var(--warn); }
+  .segbar.empty i { background:transparent; border:1px dashed var(--border); height:7px; }
+  .segbar.smooth { gap:0; background:var(--bar); border-radius:2px; overflow:hidden; }
+  .segbar.smooth i { flex:none; height:7px; background:var(--accent); }
+  .segbar.smooth.full i { background:var(--warn); }
+  .quota-txt { display:block; font-size:11px; color:var(--muted);
+    font-variant-numeric:tabular-nums; margin-top:2px; }
+  .quota-txt.full { color:var(--warn); }
+  tr.full td { background:rgba(245,158,11,.06); }
+
+  .bar { position:relative; height:7px; border-radius:99px; background:var(--bar);
+    overflow:hidden; margin-top:5px; }
+  .bar > i { position:absolute; left:0; top:0; bottom:0; background:var(--accent);
+    border-radius:99px; }
+  .bar > i.fail { background:var(--danger); }
+  .pill { display:inline-block; border-radius:5px; padding:1px 6px; font-size:11px;
+    background:var(--chip); color:var(--muted); }
+  .pill.ok { color:var(--ok); } .pill.bad { color:var(--danger); }
+  .pill.cool { color:var(--warn); background:rgba(245,158,11,.14); }
+  .err { color:var(--danger); font-size:11px; font-family:Consolas,monospace;
+    word-break:break-all; }
+
+  .form { display:flex; flex-direction:column; gap:11px; margin-top:8px; }
+  .frow { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .frow label.t { font-size:12.5px; }
+  .frow .d { color:var(--muted); font-size:11px; margin-top:2px; line-height:1.5; }
+  select, input[type="number"] { background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px; }
+  input[type="number"] { width:86px; text-align:center; }
+  .factions { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
+
+  .feed { max-height:330px; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+  .ev { display:flex; gap:8px; align-items:flex-start; padding:5px 6px;
+    border-radius:6px; font-size:12px; }
+  .ev:hover { background:var(--hover); }
+  .ev .t { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;
+    min-width:56px; flex:none; padding-top:1px; }
+  .ev .k { flex:none; min-width:44px; text-align:center; border-radius:5px;
+    padding:1px 5px; font-size:11px; background:var(--chip); }
+  .ev.use .k { color:var(--ok); background:rgba(34,197,94,.15); }
+  .ev.fail .k { color:var(--danger); background:rgba(239,68,68,.15); }
+  .ev.switch .k { color:var(--warn); background:rgba(245,158,11,.16); }
+  .ev.cooldown .k { color:var(--accent); background:rgba(76,141,255,.15); }
+  .ev .body { flex:1; min-width:0; }
+  .ev .who { font-family:Consolas,monospace; font-size:11.5px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ev .dt { color:var(--muted); font-size:11px; word-break:break-all; }
+
+  .empty { text-align:center; padding:34px 16px; color:var(--muted); }
+  .empty .big { font-size:34px; margin-bottom:8px; }
+  .steps { text-align:left; max-width:560px; margin:14px auto 0;
+    background:var(--panel2); border:1px dashed var(--border); border-radius:9px;
+    padding:13px 16px; line-height:2; font-size:12.5px; }
+  .steps code { background:var(--chip); padding:1px 6px; border-radius:5px;
+    font-family:Consolas,monospace; font-size:12px; }
+  .banner { border-radius:9px; padding:11px 13px; margin-bottom:12px; font-size:12.5px;
+    line-height:1.8; border:1px solid; }
+  .banner.err { border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.09);
+    color:var(--danger); }
+  .banner.info { border-color:rgba(76,141,255,.35); background:rgba(76,141,255,.08); }
+
+  #toast { position:fixed; right:18px; bottom:18px; padding:10px 16px; border-radius:9px;
+    background:var(--text); color:var(--bg); opacity:0; transition:opacity .25s;
+    pointer-events:none; z-index:60; font-size:12.5px; max-width:70vw; }
+  #toast.show { opacity:.95; }
+  #toast.err { background:var(--danger); color:#fff; }
+
+  #askMask { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none;
+    align-items:center; justify-content:center; z-index:70; }
+  #askMask.show { display:flex; }
+  #askBox { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:18px; width:min(440px,92vw); box-shadow:0 18px 50px rgba(0,0,0,.35); }
+  #askMsg { line-height:1.8; white-space:pre-wrap; margin-bottom:15px; font-size:13px; }
+  #askBtns { display:flex; gap:9px; justify-content:flex-end; }
+  #askInputs { margin-bottom:14px; }
+  #askInputs input { width:100%; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:9px 11px;
+    font-family:Consolas,monospace; font-size:13px; letter-spacing:.4px; }
+  button.mini { padding:2px 9px; font-size:11.5px; border-radius:6px; }
+
+  /* 线路参数编辑：行内超时输入框 + 参数弹窗表单 */
+  .tIn { width:64px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:3px 6px;
+    font-size:12px; text-align:center; font-variant-numeric:tabular-nums; }
+  .dlgfields { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+  .dlgfield { display:flex; flex-direction:column; gap:4px; font-size:12px;
+    color:var(--muted); }
+  .dlgfield input { width:100%; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+    font-family:Consolas,monospace; font-size:12.5px; }
+  details.trash { margin-top:10px; border-top:1px dashed var(--border); padding-top:7px; }
+  details.trash > summary { cursor:pointer; color:var(--muted); font-size:12px;
+    user-select:none; }
+  details.trash[open] > summary { color:var(--text); font-weight:600; }
+  #mTbl { margin-top:2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔁 API Key 轮询器</h1>
+  <span class="sub" id="hdSub">openai_chat_completion_rotate</span>
+  <span class="chip" id="chipMode">-</span>
+  <span class="chip" id="chipSwitch">-</span>
+  <span class="spacer"></span>
+  <label class="switch" title="每 3 秒自动刷新">
+    <input type="checkbox" id="autoBox" checked /><i></i><span>自动刷新</span>
+  </label>
+  <button id="btnRefresh">立即刷新</button>
+</header>
+
+<div class="kpis" id="kpis"></div>
+
+<main>
+  <div class="col" id="leftCol"></div>
+
+  <div class="col">
+    <div class="card">
+      <h3>⚙️ 轮换设置 <span class="tag">保存后立即生效，无需重启</span></h3>
+      <div class="form">
+        <div class="frow">
+          <div><div class="t">总开关</div><div class="d">关闭后退回原生行为：每次在全部 Key 中随机取一个</div></div>
+          <label class="switch"><input type="checkbox" id="f_enable" /><i></i></label>
+        </div>
+        <div class="frow">
+          <div><div class="t">轮换策略</div><div class="d">顺序轮询 = 第1次用1、第2次用2……</div></div>
+          <select id="f_rotate_mode">
+            <option value="round_robin">顺序轮询</option>
+            <option value="random">随机</option>
+          </select>
+        </div>
+        <div class="frow">
+          <div><div class="t">超时/连接失败换 Key</div><div class="d">关键开关：原生是同 Key 反复重试</div></div>
+          <label class="switch"><input type="checkbox" id="f_rotate_on_timeout" /><i></i></label>
+        </div>
+        <div class="frow">
+          <div><div class="t">429 限流换 Key</div><div class="d">确定性地换到下一个 Key</div></div>
+          <label class="switch"><input type="checkbox" id="f_rotate_on_429" /><i></i></label>
+        </div>
+        <div class="frow">
+          <div><div class="t">换 Key 重试次数</div>
+            <div class="d">存于插件配置。与线路「超时」配对生效：全部超时情况下，
+              最坏耗时 ≈ 超时 × 底层重试 ×（本次数 + 1）；0 = 失败直接交给回退模型链</div></div>
+          <input type="number" id="f_switch_retries" min="0" max="5" step="1" />
+        </div>
+        <div class="frow">
+          <div><div class="t">底层请求重试（AstrBot 原生）</div>
+            <div class="d">Agent Runner 的「异常重试次数」，写原生 agent_runner 配置
+              （含首次，最小 1）：底层同 Key 会先自己重试，调到 1 换 Key 生效更快</div></div>
+          <input type="number" id="f_request_max_retries" min="1" max="30" step="1" />
+        </div>
+        <div class="frow">
+          <div><div class="t">触发冷却的连续失败次数</div><div class="d">达到后该 Key 暂停参与轮换</div></div>
+          <input type="number" id="f_cooldown_threshold" min="1" max="10" step="1" />
+        </div>
+        <div class="frow">
+          <div><div class="t">冷却时长（秒）</div><div class="d">0 = 关闭冷却</div></div>
+          <input type="number" id="f_cooldown_seconds" min="0" max="600" step="10" />
+        </div>
+        <div class="frow">
+          <div><div class="t">限速（每分钟调用数）</div>
+            <div class="d">读写配置里的限速数据；按 Key 数均分（舍去小数），
+              满额的 Key 跳过，全满移交备用模型，60 秒窗口重置</div></div>
+          <select id="f_rate_limit_per_min">
+            <option value="0">不限速</option>
+            <option value="10">10 / 分钟</option>
+            <option value="30">30 / 分钟</option>
+            <option value="60">60 / 分钟</option>
+            <option value="120">120 / 分钟</option>
+            <option value="300">300 / 分钟</option>
+            <option value="600">600 / 分钟</option>
+          </select>
+        </div>
+        <div class="frow">
+          <div><div class="t">日志记录每次使用的 Key</div><div class="d">写入 AstrBot 日志（脱敏），便于排查</div></div>
+          <label class="switch"><input type="checkbox" id="f_log_key_usage" /><i></i></label>
+        </div>
+        <div class="frow">
+          <div><div class="t">启用 /keyrot 命令</div><div class="d">聊天里发 /keyrot 查看状态</div></div>
+          <label class="switch"><input type="checkbox" id="f_stats_command" /><i></i></label>
+        </div>
+        <div class="frow">
+          <div><div class="t">最后兜底模型</div>
+            <div class="d">追加到回退链末位：所有模型都报错/被跳过时，
+              最后一定会转交它（写配置即生效，无需重启）</div></div>
+          <select id="f_backup_provider_id"><option value="">不设置</option></select>
+        </div>
+        <div class="factions">
+          <button id="btnReset" class="danger">清空统计</button>
+          <button id="btnReload">还原</button>
+          <button id="btnSave" class="primary">保存设置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📡 实时动态 <span class="tag" id="evCount">最近 80 条</span></h3>
+      <div class="feed" id="feed"></div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+<div id="askMask">
+  <div id="askBox">
+    <div id="askMsg"></div>
+    <div id="askInputs"></div>
+    <div id="askBtns">
+      <button id="askCancel">取消</button>
+      <button id="askOk" class="primary">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const bridge = window.AstrBotPluginPage;
+const $ = (id) => document.getElementById(id);
+const S = { status: null, dirty: false, timer: null, auto: true };
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function pad(n) { return n < 10 ? "0" + n : "" + n; }
+function shortBase(u) {
+  return String(u || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+function fmtClock(ts) {
+  const d = new Date(ts * 1000);
+  return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+}
+function relTime(ts) {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (s < 5) return "刚刚";
+  if (s < 60) return s + "秒前";
+  if (s < 3600) return Math.floor(s / 60) + "分钟前";
+  return Math.floor(s / 3600) + "小时前";
+}
+let _toastTimer = null;
+function toast(msg, err) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "show" + (err ? " err" : "");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = ""; }, 3200);
+}
+// AstrBot 的受限 iframe 禁用了原生 confirm，这里自带一个确认框
+let _askResolve = null;
+function askCore(msg, withInput) {
+  return new Promise((resolve) => {
+    _askResolve = resolve;
+    $("askMsg").textContent = msg;
+    $("askInputs").innerHTML = withInput
+      ? '<textarea id="askInput" rows="5" spellcheck="false" ' +
+        'placeholder="每行粘贴一个 API Key&#10;也支持逗号、分号、空格分隔&#10;&#10;1 个 = 固定使用；多个 = 在这些 Key 里轮换"></textarea>'
+      : "";
+    $("askMask").classList.add("show");
+    if (withInput) {
+      setTimeout(() => { const i = $("askInput"); if (i) i.focus(); }, 60);
+    }
+  });
+}
+function askConfirm(msg) { return askCore(msg, false); }
+function askInput(msg) {
+  return askCore(msg, true).then((ok) => {
+    if (!ok) return null;
+    const i = $("askInput");
+    return i ? String(i.value || "").trim() : null;
+  });
+}
+// 多字段表单弹窗：fields = [{k, label, value}]，确认返回 {k: value}，取消返回 null
+function askForm(msg, fields) {
+  return new Promise((resolve) => {
+    _askResolve = resolve;
+    $("askMsg").textContent = msg;
+    $("askInputs").innerHTML = '<div class="dlgfields">' + (fields || []).map((f) =>
+      '<label class="dlgfield"><span>' + esc(f.label) + "</span>" +
+      '<input data-k="' + esc(f.k) + '" value="' + esc(f.value == null ? "" : f.value) +
+      '" /></label>').join("") + "</div>";
+    $("askMask").classList.add("show");
+    setTimeout(() => {
+      const i = $("askInputs").querySelector("input[data-k]");
+      if (i) { i.focus(); if (i.select) i.select(); }
+    }, 60);
+  }).then((ok) => {
+    if (!ok) return null;
+    const out = {};
+    $("askInputs").querySelectorAll("input[data-k]").forEach((i) => {
+      out[i.getAttribute("data-k")] = i.value;
+    });
+    return out;
+  });
+}
+function closeAsk(val) {
+  $("askMask").classList.remove("show");
+  const r = _askResolve; _askResolve = null;
+  if (r) r(val);
+}
+$("askOk").onclick = () => closeAsk(true);
+$("askCancel").onclick = () => closeAsk(false);
+$("askMask").onclick = (e) => { if (e.target.id === "askMask") closeAsk(false); };
+
+async function apiGet(ep, params) {
+  const r = await bridge.apiGet(ep, params || {});
+  if (r && r.status === "error") throw new Error(r.message || "请求失败");
+  return r;
+}
+async function apiPost(ep, body) {
+  const r = await bridge.apiPost(ep, body || {});
+  if (r && r.status === "error") throw new Error(r.message || "请求失败");
+  return r;
+}
+function applyTheme(ctx) {
+  const dark = ctx && typeof ctx.isDark === "boolean" ? ctx.isDark : true;
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+}
+
+// ---------------- 渲染 ----------------
+function renderHeader(st) {
+  const s = st.settings || {};
+  $("chipMode").textContent = s.rotate_mode === "random" ? "策略：随机" : "策略：顺序轮询";
+  $("chipMode").className = "chip";
+  const on = s.enable !== false;
+  $("chipSwitch").textContent = on ? "轮换已开启" : "轮换已关闭（原生随机）";
+  $("chipSwitch").className = "chip " + (on ? "ok" : "off");
+  $("hdSub").textContent = st.provider_type || "";
+}
+
+function renderKpis(st) {
+  const t = st.totals || {};
+  const ovCount = Object.keys(st.overrides || {}).length;
+  const cards = [
+    { cls: ovCount ? "warn" : "", v: ovCount, k: "已覆盖 Key 的模型" },
+    { cls: "info", v: t.lines || 0, k: "轮询中的线路" },
+    { cls: "info", v: t.keys || 0, k: "Key 总数" },
+    { cls: "", v: t.assigned || 0, k: "累计分配次数" },
+    { cls: "good", v: t.ok || 0, k: "成功次数" },
+    { cls: "bad", v: t.failed || 0, k: "失败次数" },
+    { cls: t.cooling ? "warn" : "", v: t.cooling || 0, k: "冷却中的 Key" }
+  ];
+  $("kpis").innerHTML = cards.map((c) =>
+    '<div class="kpi ' + c.cls + '"><div class="v">' + esc(c.v) +
+    '</div><div class="k">' + esc(c.k) + "</div></div>").join("");
+}
+
+function keyRow(line, item) {
+  const exhausted = !!item.exhausted;
+  const cooling = item.cooldown > 0;
+  const next = line.mode === "round_robin" && item.index === line.next_index && !exhausted;
+  let td = '<tr class="' + (next ? "isnext " : "") + (cooling ? "cool " : "") +
+    (exhausted ? "full" : "") + '">';
+  td += '<td><span class="idx">' + item.index + "</span></td>";
+  td += '<td class="k">' + esc(item.key);
+  if (next) td += ' <span class="nextpill">下一个</span>';
+  if (exhausted) td += ' <span class="pill cool">已满 · 跳过</span>';
+  td += "</td>";
+  td += "<td>" + quotaBar(line, item) + "</td>";
+  td += '<td class="num">' + item.assigned + "</td>";
+  td += '<td class="num"><span class="pill ok">' + item.ok + "</span></td>";
+  td += '<td class="num"><span class="pill bad">' + item.fail + "</span></td>";
+  td += "<td>" + (cooling
+        ? '<span class="pill cool">⏳ 冷却中 · 跳过 ' + item.cooldown + "s</span>"
+        : (exhausted ? '<span class="pill cool">满额 · 跳过</span>'
+                     : '<span class="pill">正常</span>')) + "</td>";
+  td += "</tr>";
+  if (item.fail && item.last_error) {
+    td += '<tr class="' + (cooling ? "cool" : "") + '"><td></td><td colspan="6" class="err">└ ' +
+          esc(item.last_error) + "</td></tr>";
+  }
+  return td;
+}
+
+// 额度条：限速时按均分额度切成 N 格，每用一次填一格；不限速则只有一条空轨道
+function quotaBar(line, item) {
+  if (!line.limited) {
+    return '<div class="segbar empty" title="未开启限速"><i></i><i></i><i></i></div>' +
+      '<span class="muted" style="font-size:11px">不限速</span>';
+  }
+  const q = Math.max(0, item.quota | 0);
+  const u = Math.max(0, item.used | 0);
+  if (!q) return '<span class="pill bad">额度 0</span>';
+  const filled = Math.min(q, u);
+  const full = filled >= q;
+  let bar;
+  if (q <= 12) {
+    let seg = "";
+    for (let i = 0; i < q; i++) {
+      seg += '<i class="' + (i < filled ? "on" : "") + '"></i>';
+    }
+    bar = '<div class="segbar' + (full ? " full" : "") + '" title="本窗口已用 ' +
+      filled + "/" + q + '">' + seg + "</div>";
+  } else {
+    const pct = Math.round(filled / q * 100);
+    bar = '<div class="segbar smooth' + (full ? " full" : "") + '" title="本窗口已用 ' +
+      filled + "/" + q + '"><i style="width:' + pct + '%"></i></div>';
+  }
+  return bar + '<span class="quota-txt' + (full ? " full" : "") + '">' + filled + "/" + q +
+    (full ? " 已满" : "") + "</span>";
+}
+
+// 配对计算：最坏耗时 ≈ 线路超时 × 底层重试（AstrBot 原生，含首次）×（换 Key 次数 + 1）
+function worstLine(line, pairs) {
+  const t = parseInt(line.timeout, 10) || 0;
+  if (!t) return "-";
+  return t * Math.max(1, pairs.native) * (Math.max(0, pairs.retries) + 1);
+}
+
+function renderLines(st) {
+  const box = $("leftCol");
+  let html = "";
+  // 配对的两侧参数：换 Key 重试次数（插件配置）与底层重试（AstrBot 原生）
+  const pairs = {
+    retries: st.settings && st.settings.switch_retries != null
+      ? Number(st.settings.switch_retries) : 1,
+    native: st.agent && st.agent.request_max_retries != null
+      ? Number(st.agent.request_max_retries) : 1
+  };
+
+  if (!st.registered) {
+    html += '<div class="banner err">提供商类型 <b>' + esc(st.provider_type) +
+      "</b> 未注册 —— 插件可能被禁用或加载失败。禁用插件会让该类型的服务商全部不可用，" +
+      "请在「插件管理」里重新启用本插件。</div>";
+  }
+  if (st.registered && (!st.lines || st.lines.length === 0)) {
+    const warns = st.warnings || [];
+    if (warns.length) {
+      html += '<div class="card"><h3>⚠️ 为什么上面没有轮换线路</h3>' +
+        warns.map((w) => '<div class="banner info" style="margin:8px 0 0">' +
+          esc(w) + "</div>").join("") + "</div>";
+    }
+    html += '<div class="card"><div class="empty"><div class="big">🔌</div>' +
+      "<div>还没有线路在轮换。两种接入方式任选其一：</div>" +
+      '<div class="steps">' +
+      "<div><b>方式 A：改类型（用线路自带的 Key 轮换）</b></div>" +
+      "<div>1. WebUI → 服务提供商 → 编辑你的服务商</div>" +
+      "<div>2. 把「类型」改成 <code>OpenAI Compatible（多 Key 轮询）</code></div>" +
+      "<div>3. 保存即生效，无需重启</div>" +
+      '<div style="margin-top:6px"><button id="btnCopyType">复制类型名</button></div>' +
+      '<div style="margin-top:12px"><b>方式 B：不动类型，手动填 Key 池</b></div>' +
+      "<div>在下方「模型配置」表格里点「设置」，粘贴一个或多个 Key，" +
+      "保存后该模型每次调用只在这些 Key 里轮换。</div>" +
+      "</div></div></div>";
+  }
+
+  (st.lines || []).forEach((line) => {
+
+    html += '<div class="card"><div class="linehead">' +
+      '<span class="model">' + esc(line.model) + "</span>" +
+      '<span class="chip">线路 ' + esc(line.source_id) + "</span>" +
+      '<span class="chip">' + esc(line.total) + " 个 Key</span>" +
+      (line.overridden
+        ? '<span class="chip warn" title="线路配置里的 ' + line.source_key_count +
+          ' 个 Key 已被手动池替换">🔑 手动池 ' + line.override_total + ' 个</span>'
+        : "") +
+      '<span class="chip">超时 <input type="number" class="tIn" min="1" max="3600" step="1" value="' +
+        esc(line.timeout === "" || line.timeout == null ? 60 : line.timeout) +
+        '" title="服务商配置里的超时（秒）：改动写入 cmd_config.json 并重建实例" /> 秒 ' +
+        '<button class="mini primary" data-act="set_timeout" data-id="' + esc(line.source_id) +
+        '">保存</button></span>' +
+      '<span class="chip" title="配对关系：全部超时且底层都在重试的最坏情况才达到；底层重试含首次">⏱ 最坏 ≈ ' +
+        esc(worstLine(line, pairs)) + "s</span>" +
+      '<span class="chip' + (line.limited ? " warn" : "") + '" title="配置里的限速数据，按 Key 均分">⚡ ' +
+      (line.limited
+        ? esc(line.rate_limit) + "/min · 每 Key " + esc(line.quota) + " 条"
+        : "不限速") + "</span>" +
+      (line.limited && line.all_exhausted
+        ? '<span class="chip off">额度用尽 → 备用模型（' + esc(line.remaining) + "s 后重置）</span>"
+        : (line.limited && line.remaining
+            ? '<span class="chip">窗口剩 ' + esc(line.remaining) + "s</span>"
+            : "")) +
+      (line.model_skipped
+        ? '<span class="chip off">⛔ 模型跳过 ' + esc(line.model_skipped) +
+          "s（连续失败）→ 交给下一个模型</span>"
+        : "") +
+      (line.all_unavailable
+        ? '<span class="chip off">全部 Key 不可用 → 备用模型</span>'
+        : (line.available != null && line.available < line.total
+            ? '<span class="chip warn">可用 ' + esc(line.available) + "/" +
+              esc(line.total) + "（其余冷却/满额）</span>"
+            : "")) +
+      (line.cfg_override ? '<span class="chip warn">独立配置</span>' : "") +
+      (line.enable ? "" : '<span class="chip off">已停用</span>') +
+      '<span class="spacer"></span>' +
+      (line.mode === "round_robin"
+        ? '<span class="nextpill">下一个：第 ' + line.next_index + " 个</span>"
+        : '<span class="chip">随机策略</span>') +
+      "</div>" +
+      '<div class="base" title="' + esc(line.api_base) + '">' + esc(line.api_base) + "</div>" +
+      "<table><thead><tr><th style='width:42px'>#</th><th>Key</th>" +
+      "<th style='width:168px'>额度</th>" +
+      "<th style='width:56px'>分配</th><th style='width:56px'>成功</th>" +
+      "<th style='width:56px'>失败</th><th style='width:72px'>状态</th></tr></thead><tbody>";
+    line.keys.forEach((item) => {
+      html += keyRow(line, item);
+    });
+    html += "</tbody></table></div>";
+  });
+
+  // ---- 模型配置（学隔壁：读全部线路/模型，标出谁在轮换） ----
+  const mc = st.model_config || { sources: [], models: [] };
+  if (mc.sources && mc.sources.length) {
+    html += '<div class="card"><h3>🗂️ 模型配置' +
+      '<span class="tag">读自 AstrBot 配置：全部线路与模型条目</span></h3>';
+    (st.warnings || []).forEach((w) => {
+      html += '<div class="banner info" style="margin:6px 0">' + esc(w) + "</div>";
+    });
+    html += '<div class="hint">「配置类型」和「实际实例」可能不一致（改了配置没保存时），' +
+      "两列都列出来，以实际上面那个「轮换线路」区块为准。</div>" +
+      '<div class="hint">超时属于<b>服务商配置</b>（保存写 cmd_config.json 并重建实例）；' +
+      '「换 Key 重试次数」与「底层请求重试」属于<b>配置文件</b>（右侧设置）——' +
+      '两者配对：最坏耗时 ≈ 超时 × 底层重试 ×（换 Key 次数 + 1）。</div>' +
+      '<div class="frow" style="justify-content:flex-start;gap:8px;margin:6px 0">' +
+      '<span style="font-size:12.5px">统一超时（秒）</span>' +
+      '<input type="number" id="syncTimeout" class="tIn" min="1" max="3600" step="1" placeholder="如 60" />' +
+      '<button id="btnSyncTimeout" title="把全部线路的超时改成同一个值（逐条写配置并重建实例）">同步到全部线路</button>' +
+      "</div>" +
+      "<table><thead><tr><th>线路</th><th>配置类型</th><th>Key</th><th>模型数</th>" +
+      "<th>地址</th><th style='width:150px'>超时（秒）</th><th>实际状态</th><th>操作</th></tr></thead><tbody>";
+    mc.sources.forEach((s) => {
+      let statePill;
+      if (s.instance_rotating && s.rotating) {
+        statePill = '<span class="pill ok">✅ 轮换中</span>';
+      } else if (s.rotating && !s.instance_rotating) {
+        statePill = '<span class="pill cool">⏳ 待重建实例</span>';
+      } else if (s.instance_rotating && !s.rotating) {
+        statePill = '<span class="pill cool">⏳ 配置已改回</span>';
+      } else if (s.key_count > 1) {
+        statePill = '<span class="pill bad">未轮换（有 ' + s.key_count + ' 个 Key）</span>';
+      } else if (s.key_count === 0) {
+        statePill = '<span class="pill bad">无 Key</span>';
+      } else {
+        statePill = '<span class="pill">原生型</span>';
+      }
+      html += "<tr>" +
+        '<td class="k">' + esc(s.id) + "</td>" +
+        "<td>" + (s.rotating
+          ? '<span class="pill ok">轮询型</span>'
+          : '<span class="pill">原生型</span>') + "</td>" +
+        '<td class="num">' + s.key_count +
+        (s.instance_rotating && s.key_count > 1 ? " 🔁" : "") + "</td>" +
+        '<td class="num">' + s.model_count + "</td>" +
+        '<td class="k" title="' + esc(s.api_base) + '">' + esc(shortBase(s.api_base)) + "</td>" +
+        '<td><input type="number" class="tIn" min="1" max="3600" step="1" value="' +
+        esc(s.timeout === "" || s.timeout == null ? 60 : s.timeout) + '" /> ' +
+        '<button class="mini primary" data-act="set_timeout" data-id="' + esc(s.id) +
+        '" title="写入服务商配置并重建实例">保存</button></td>' +
+        "<td>" + statePill + "</td>" +
+        '<td><button class="mini" data-act="set_type" data-id="' + esc(s.id) +
+        '" data-type="' + (s.rotating
+          ? "openai_chat_completion"
+          : "openai_chat_completion_rotate") + '">' +
+        (s.rotating ? "关闭轮换" : "开启轮换") + "</button> " +
+        '<button class="mini" data-act="src_params" data-id="' + esc(s.id) +
+        '" title="编辑超时 / 接口地址 / 代理（AstrBot 服务商原生参数）">参数</button></td>' +
+        "</tr>";
+    });
+    html += "</tbody></table>" +
+      '<div class="hint" style="margin-top:10px">模型条目（AstrBot 按它为线路创建实例）</div>' +
+      '<table id="mTbl"><thead><tr><th>模型 ID</th><th>所属线路</th><th>轮换</th>' +
+      "<th>实例</th><th>覆盖 Key</th></tr></thead><tbody>";
+    const alive = (mc.models || []).filter((m) => !m.deleted);
+    const removed = (mc.models || []).filter((m) => m.deleted);
+    alive.forEach((m) => {
+      const n = m.override_count || 0;
+      const hasOv = n > 0;
+      const first = hasOv ? (m.override[0] || "") : "";
+      html += "<tr>" +
+        '<td class="k">' + esc(m.id) + "</td>" +
+        "<td>" + esc(m.source_id) + "</td>" +
+        "<td>" + (m.rotating
+          ? '<span class="pill ok">轮询中</span>'
+          : '<span class="pill">未轮换</span>') + "</td>" +
+        "<td>" + (m.instantiated
+          ? '<span class="pill">已加载</span>'
+          : '<span class="pill bad">未加载</span>') + "</td>" +
+        "<td>" + (hasOv
+          ? '<span class="pill ' + (m.override_active ? "ok" : "warn") +
+            '" title="手动 Key 池：' + esc((m.override || []).join(", ")) + '">🔑×' + n +
+            (n > 1 ? " 轮换中" : " 固定") + (m.override_active ? "" : "（待生效）") +
+            "</span> <span class=\"muted\" style=\"font-size:11px\">" +
+            esc(first) + (n > 1 ? " …" : "") + "</span> "
+          : '<span class="pill">未设置</span> ') +
+        '<button class="mini" data-act="key" data-id="' + esc(m.id) + '">' +
+        (hasOv ? "管理" : "设置") + "</button>" +
+        (hasOv
+          ? ' <button class="mini danger" data-act="clear" data-id="' + esc(m.id) + '">清空</button>'
+          : "") +
+        ' <button class="mini danger" data-act="delete" data-id="' + esc(m.id) +
+        '" title="退出轮回，配置保留在后台">删除</button>' +
+        "</td></tr>";
+    });
+    if (!alive.length) {
+      html += '<tr><td colspan="5" class="muted" style="padding:14px 6px">' +
+        "没有在用的模型——都被删除了？去下方回收站恢复。</td></tr>";
+    }
+    html += "</tbody></table>";
+
+    // ---- 回收站：已删除的模型（保留在后台，不参与轮换） ----
+    if (removed.length) {
+      html += '<details class="trash"><summary>🗑️ 已删除 ' + removed.length +
+        " 个模型（后台保留 · 不参与轮回 · 不显示）</summary>" +
+        '<div class="hint" style="margin:8px 0 6px">需要时点「恢复」把它抓回模型列表；' +
+        "也可以先「配置 Key 池」，恢复后立即生效。</div>" +
+        "<table><tbody>";
+      removed.forEach((m) => {
+        html += "<tr>" +
+          '<td class="k">' + esc(m.id) + "</td>" +
+          "<td>" + esc(m.source_id) + "</td>" +
+          '<td class="muted" style="font-size:11px">未加载 · 不轮换</td>' +
+          '<td style="text-align:right;white-space:nowrap">' +
+          '<button class="mini" data-act="restore" data-id="' + esc(m.id) + '">恢复</button> ' +
+          '<button class="mini" data-act="key" data-id="' + esc(m.id) + '">配置 Key 池</button>' +
+          "</td></tr>";
+      });
+      html += "</tbody></table></details>";
+    }
+    html += "</div>";
+  }
+
+  box.innerHTML = html;
+
+  // 统一超时：一次把全部线路的超时改成同一个值（逐条写配置 + 重建实例）
+  const syncBtn = $("btnSyncTimeout");
+  if (syncBtn) {
+    syncBtn.onclick = async () => {
+      const v = parseInt($("syncTimeout").value, 10);
+      if (!(v >= 1 && v <= 3600)) { toast("超时需在 1~3600 秒之间", true); return; }
+      const srcs = (((S.status || {}).model_config || {}).sources || []);
+      if (!srcs.length) { toast("没有可同步的线路", true); return; }
+      const ok = await askConfirm(
+        "把 " + srcs.length + " 条线路的超时统一改成 " + v + " 秒？\n\n" +
+        "· 写入各线路的服务商配置（cmd_config.json）\n" +
+        "· 逐条重建模型实例，无需重启\n" +
+        "· 接口地址、Key、代理都不动"
+      );
+      if (!ok) return;
+      let done = 0, fail = 0;
+      for (const s of srcs) {
+        try {
+          const r = await apiPost("set_source", { source_id: s.id, timeout: v });
+          if (r && r.ok) done++; else fail++;
+        } catch (err) { fail++; }
+      }
+      toast("已同步 " + done + " 条线路" + (fail ? "，" + fail + " 条失败" : "") + "（超时 " + v + " 秒）");
+      S.dirty = false;
+      await loadStatus();
+    };
+  }
+
+  const btn = $("btnCopyType");
+  if (btn) {
+    btn.onclick = () => {
+      const text = (st.provider_type || "openai_chat_completion_rotate");
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => toast("已复制：" + text),
+            () => fallbackCopy(text));
+        } else { fallbackCopy(text); }
+      } catch (e) { fallbackCopy(text); }
+    };
+  }
+}
+function fallbackCopy(text) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); document.body.removeChild(ta);
+    toast("已复制：" + text);
+  } catch (e) { toast("复制失败：" + text, true); }
+}
+
+function renderEvents(st) {
+  const evs = st.events || [];
+  $("evCount").textContent = evs.length ? ("最近 " + evs.length + " 条") : "暂无动态";
+  if (!evs.length) {
+    $("feed").innerHTML = '<div class="empty" style="padding:22px 8px">' +
+      "还没有调用记录。发一条消息触发 LLM 调用后，这里会实时滚动。</div>";
+    return;
+  }
+  $("feed").innerHTML = evs.map((e) => {
+    const who = (e.source ? e.source : "-") + (e.model ? " / " + e.model : "");
+    return '<div class="ev ' + esc(e.kind) + '" title="' + esc(relTime(e.t)) + '">' +
+      '<span class="t">' + fmtClock(e.t) + "</span>" +
+      '<span class="k">' + esc(e.label) + "</span>" +
+      '<span class="body"><span class="who">' + esc(who) +
+      (e.key ? " · " + esc(e.key) : "") + "</span>" +
+      (e.detail ? '<div class="dt">' + esc(e.detail) + "</div>" : "") +
+      "</span></div>";
+  }).join("");
+}
+
+// ---------------- 表单 ----------------
+const F_KEYS = ["enable", "rotate_mode", "rotate_on_timeout", "rotate_on_429",
+  "switch_retries", "request_max_retries", "cooldown_threshold", "cooldown_seconds",
+  "rate_limit_per_min", "log_key_usage", "stats_command", "backup_provider_id"];
+const RATE_PRESETS = ["0", "10", "30", "60", "120", "300", "600"];
+const STRING_FIELDS = new Set(["rotate_mode", "backup_provider_id"]);
+const BOOLS = new Set(["enable", "rotate_on_timeout", "rotate_on_429",
+  "log_key_usage", "stats_command"]);
+
+function fillForm() {
+  if (S.dirty || !S.status) return;
+  const s = S.status.settings || {};
+  F_KEYS.forEach((k) => {
+    const el = $("f_" + k);
+    if (!el) return;
+    if (k === "request_max_retries") {
+      // AstrBot 原生 agent_runner 配置，不在插件 settings 里
+      const ag = (S.status || {}).agent || {};
+      el.value = ag.request_max_retries == null ? "" : String(ag.request_max_retries);
+      return;
+    }
+    if (BOOLS.has(k)) {
+      el.checked = s[k] !== false;
+      return;
+    }
+    const val = s[k] == null ? "" : String(s[k]);
+    if (el.id === "f_backup_provider_id") {
+      const models = (((S.status || {}).model_config || {}).models || [])
+        .filter((m) => !m.deleted);
+      el.innerHTML = '<option value="">不设置（仅用现有回退链）</option>' +
+        models.map((m) =>
+          '<option value="' + esc(m.id) + '">' + esc(m.id) + "</option>").join("");
+    }
+    if (el.tagName === "SELECT") {
+      // 配置里可能是自定义限速值，下拉没有该选项时补一个
+      const has = Array.from(el.options).some((o) => o.value === val);
+      if (!has && val !== "") {
+        el.add(new Option(val + " / 分钟（自定义）", val));
+      } else if (val === "") {
+        el.selectedIndex = 0;
+      }
+    }
+    el.value = val;
+  });
+}
+function collectForm() {
+  const out = {};
+  F_KEYS.forEach((k) => {
+    const el = $("f_" + k);
+    if (!el) return;
+    out[k] = BOOLS.has(k) ? el.checked
+      : (STRING_FIELDS.has(k) ? el.value : parseInt(el.value, 10));
+  });
+  return out;
+}
+
+// ---------------- 主流程 ----------------
+function render() {
+  const st = S.status;
+  if (!st) return;
+  renderHeader(st);
+  renderKpis(st);
+  renderLines(st);
+  renderEvents(st);
+  fillForm();
+}
+
+async function loadStatus() {
+  try {
+    S.status = await apiGet("status", {});
+    render();
+  } catch (e) {
+    toast(String((e && e.message) || e), true);
+  }
+}
+function startAuto() {
+  stopAuto();
+  S.timer = setInterval(() => { if (!S.dirty) loadStatus(); }, 3000);
+}
+function stopAuto() { if (S.timer) { clearInterval(S.timer); S.timer = null; } }
+
+$("autoBox").onchange = (e) => {
+  S.auto = e.target.checked;
+  if (S.auto) { startAuto(); toast("已开启自动刷新"); }
+  else { stopAuto(); toast("已关闭自动刷新"); }
+};
+$("btnRefresh").onclick = () => { S.dirty = false; loadStatus(); };
+$("btnReload").onclick = () => { S.dirty = false; fillForm(); toast("已还原为当前生效的设置"); };
+
+$("btnSave").onclick = async () => {
+  const body = collectForm();
+  try {
+    await apiPost("settings", body);
+    S.dirty = false;
+    toast("已保存，立即生效");
+    await loadStatus();
+  } catch (e) { toast(String((e && e.message) || e), true); }
+};
+
+$("btnReset").onclick = async () => {
+  const ok = await askConfirm("确定清空所有 Key 的分配/成功/失败统计与实时动态吗？\n（不影响轮换配置）");
+  if (!ok) return;
+  try {
+    await apiPost("reset", {});
+    toast("已清空统计");
+    await loadStatus();
+  } catch (e) { toast(String((e && e.message) || e), true); }
+};
+
+// 覆盖 Key：设置 / 撤销（AstrBot iframe 禁用原生 prompt，用自带弹窗输入）
+document.addEventListener("click", async (e) => {
+  const btn = e.target && e.target.closest ? e.target.closest("button[data-act]") : null;
+  if (!btn) return;
+  const modelId = btn.getAttribute("data-id") || "";
+  const act = btn.getAttribute("data-act");
+  if (act === "set_type") {
+    const target = btn.getAttribute("data-type") || "";
+    const on = target.indexOf("rotate") >= 0;
+    const ok = await askConfirm(
+      (on ? "开启" : "关闭") + "线路 " + modelId + " 的轮换？\n\n" +
+      (on
+        ? "把「提供商类型」改成 openai_chat_completion_rotate 并重建它的模型实例：\n" +
+          "· 该线路的 Key 开始按顺序轮换\n· 地址、Key、超时都不动，不用重启"
+        : "改回 openai_chat_completion 并重建实例：\n" +
+          "· 轮换停止，退回原生随机取 Key\n· 手动 Key 池不受影响")
+    );
+    if (!ok) return;
+    try {
+      const r = await apiPost("set_type", { source_id: modelId, type: target });
+      toast(r && r.changed ? "已切换类型并重建实例" : "类型没有变化");
+      await loadStatus();
+    } catch (err) { toast(String((err && err.message) || err), true); }
+    return;
+  }
+  if (act === "set_timeout") {
+    // 行内超时保存：写服务商配置（cmd_config.json）并重建该线路实例
+    const scope = btn.closest("tr") || btn.closest(".linehead");
+    const inp = scope ? scope.querySelector("input.tIn") : null;
+    if (!inp) { toast("找不到超时输入框", true); return; }
+    const v = parseInt(inp.value, 10);
+    if (!(v >= 1 && v <= 3600)) { toast("超时需在 1~3600 秒之间", true); return; }
+    try {
+      const r = await apiPost("set_source", { source_id: modelId, timeout: v });
+      toast(r && r.changed ? "超时已保存，实例已重建" : "超时没有变化");
+      S.dirty = false;
+      await loadStatus();
+    } catch (err) { toast(String((err && err.message) || err), true); }
+    return;
+  }
+  if (act === "src_params") {
+    // 服务商原生参数弹窗：超时 / 接口地址 / 代理，一次保存一起写配置
+    const mc = ((S.status || {}).model_config || {});
+    const s = (mc.sources || []).find((x) => x.id === modelId);
+    if (!s) { toast("找不到线路 " + modelId, true); return; }
+    const v = await askForm("编辑线路 " + modelId + " 的服务商参数", [
+      { k: "timeout", label: "超时（秒，1~3600）",
+        value: s.timeout === "" || s.timeout == null ? 60 : s.timeout },
+      { k: "api_base", label: "接口地址（必须 http/https 开头）", value: s.api_base },
+      { k: "proxy", label: "代理（留空 = 不使用代理）", value: s.proxy }
+    ]);
+    if (!v) return;
+    const t = parseInt(v.timeout, 10);
+    if (!(t >= 1 && t <= 3600)) { toast("超时需在 1~3600 秒之间", true); return; }
+    const body = { source_id: modelId, timeout: t, proxy: String(v.proxy || "").trim() };
+    if (String(v.api_base || "").trim()) {
+      body.api_base = String(v.api_base).trim();
+    }
+    try {
+      const r = await apiPost("set_source", body);
+      toast(r && r.changed ? "已保存，实例已重建" : "参数没有变化");
+      S.dirty = false;
+      await loadStatus();
+    } catch (err) { toast(String((err && err.message) || err), true); }
+    return;
+  }
+  if (act === "delete") {
+    const ok = await askConfirm(
+      "删除模型 " + modelId + "？\n\n" +
+      "· 立即退出轮回，面板不再显示\n" +
+      "· 配置保留在后台，随时可从回收站恢复\n" +
+      "· 已为它配置的手动 Key 池会被清空"
+    );
+    if (!ok) return;
+    try {
+      await apiPost("delete_model", { model_id: modelId });
+      toast("已删除，已退出轮回");
+      await loadStatus();
+    } catch (err) { toast(String((err && err.message) || err), true); }
+    return;
+  }
+  if (act === "restore") {
+    try {
+      await apiPost("restore_model", { model_id: modelId });
+      toast("已恢复，实例已重建");
+      await loadStatus();
+    } catch (err) { toast(String((err && err.message) || err), true); }
+    return;
+  }
+  if (act === "key") {
+    const raw = await askInput(
+      "为模型 " + modelId + " 填充手动 Key 池\n\n" +
+      "· 配置里拿不到 Key 时，在这里手动填一个或多个\n" +
+      "· 填 1 个 = 每次调用固定用它；填多个 = 在这些 Key 里轮换（顺序按你粘贴的顺序）\n" +
+      "· 优先级最高，不受「总开关」和线路原 Key 列表影响，可随时清空\n" +
+      "· 只影响这个模型；Key 存在本机插件数据目录，面板与日志始终脱敏"
+    );
+    if (raw === null) return;
+    const keys = String(raw).split(/[,，;；\s]+/).map((s) => s.trim()).filter(Boolean);
+    if (!keys.length) { toast("请至少粘贴一个 Key", true); return; }
+    const shortIdx = keys.findIndex((k) => k.length < 8);
+    if (shortIdx >= 0) {
+      toast("第 " + (shortIdx + 1) + " 个 Key 太短，请粘贴完整的 API Key", true);
+      return;
+    }
+    try {
+      const r = await apiPost("set_key", { model_id: modelId, keys: keys.join("\n") });
+      const cnt = (r && r.count) || keys.length;
+      toast("已填充 " + cnt + " 个 Key" + (r && r.applied ? "，立即生效" : "，实例加载后接管"));
+      await loadStatus();
+    } catch (err) { toast(String((err && err.message) || err), true); }
+    return;
+  }
+  if (act === "clear") {
+    const ok = await askConfirm(
+      "清空 " + modelId + " 的手动 Key 池？\n恢复使用该线路配置里自带的 Key 列表。"
+    );
+    if (!ok) return;
+    try {
+      await apiPost("clear_key", { model_id: modelId });
+      toast("已撤销覆盖");
+      await loadStatus();
+    } catch (err) { toast(String((err && err.message) || err), true); }
+  }
+});
+
+document.querySelectorAll(".form input, .form select").forEach((el) => {
+  el.addEventListener("input", () => { S.dirty = true; });
+  el.addEventListener("change", () => { S.dirty = true; });
+});
+// 左栏行内编辑框（超时）：输入时暂停自动刷新，防止 3 秒重绘把未保存的值冲掉
+$("leftCol").addEventListener("input", (e) => {
+  const t = e.target;
+  if (t && t.classList && t.classList.contains("tIn")) S.dirty = true;
+});
+
+(async function boot() {
+  try {
+    if (bridge && bridge.ready) {
+      const ctx = await bridge.ready();
+      applyTheme(ctx);
+      if (bridge.onContext) bridge.onContext(applyTheme);
+    }
+  } catch (e) { /* 桥未就绪时仍尝试加载 */ }
+  await loadStatus();
+  if (S.auto) startAuto();
+})();
+</script>
+</body>
+</html>

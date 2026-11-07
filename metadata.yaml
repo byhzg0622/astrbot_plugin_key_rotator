@@ -1,0 +1,11 @@
+name: astrbot_plugin_key_rotator
+display_name: API Key 轮询器
+short_desc: 多 Key 轮询，超时自动换 Key，失败冷却
+desc: >-
+  同一服务商的多个 API Key 轮流使用，分摊负载、分散限流。超时、限流或鉴权失败时换下一个 Key 重试，连续失败的 Key 冷却后自动恢复。以新增提供商类型接入，不改 AstrBot 源码。
+version: v1.0.0
+author: workspace
+astrbot_version: ">=4.5,<5"
+pages:
+  - name: console
+    title: API Key 轮询面板
