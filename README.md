@@ -1,0 +1,2 @@
+# astrbot_plugin_key_rotator
+麻麻再也不怕免费api限速辣！进行同一url下的不同key可视化轮换，可调顺序/随机，内置超时等设置对接astrbot
